@@ -1,0 +1,348 @@
+---
+title: "Departmental Statistics Report"
+params:
+  dept: User Services
+  fpath: C:/Users/briney/Documents/JobDocs/LibStats/Reports/data
+  periodStart: 2018-01-01 00:00:00
+  periodEnd: 2018-06-30 23:59:59
+output:
+  pdf_document: 
+    fig_width: 7
+    fig_height: 3
+---
+
+<!--
+## Name: LibStats_report_dept.Rmd
+## Created: June 2018 by Kristin Briney
+## Purpose: This Rmarkdown template will create a departmental report using cleaned StatBot data.
+##          Department and date ranges must be specified.
+-->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+library(tidyverse)
+library(stringr)
+library(lubridate)
+library(knitr)
+
+  depart <- params$dept
+  pStart <-  ymd_hms(params$periodStart)
+  pEnd <-  ymd_hms(params$periodEnd)
+
+  ## Load consultation data
+  
+  finput <- paste(params$fpath, "Cons.csv", sep="/")
+  Cons_all <- read_csv(finput)
+  
+  Cons <- filter(Cons_all, Cons_all$StaffDept==params$dept & Cons_all$ConsDate>=pStart & 
+                   Cons_all$ConsDate<=pEnd)
+  Cons <- add_column(Cons, Week=week(Cons$ConsDate))
+  
+  ## Load presentation data
+  
+  finput <- paste(params$fpath, "Pres.csv", sep="/")
+  Pres_all <- read_csv(finput)
+  
+  Pres <- filter(Pres_all, Pres_all$StaffDept==params$dept & Pres_all$PresDateTime>=pStart & 
+                   Pres_all$PresDateTime<=pEnd)
+  Pres <- add_column(Pres, Week=week(Pres$PresDateTime))
+  
+  ## Load transaction data
+  
+  finput <- paste(params$fpath, "Trans.csv", sep="/")
+  Trans_all <- read_csv(finput)
+  
+  Trans <- filter(Trans_all, Trans_all$StaffDept==params$dept &
+                    Trans_all$TransDateTime>=pStart & 
+                    Trans_all$TransDateTime<=pEnd)
+  Trans <- add_column(Trans, Week=week(Trans$TransDateTime))
+```
+
+### `r depart` Department
+
+### Time period: `r pStart` to `r pEnd`
+
+
+## Transactions
+
+__Total `r depart` transactions = `r count(Trans)`__
+
+### Staff Transactions
+
+```{r Tparams}
+  TstaffName <- group_by(Trans, StaffName) %>% mutate(total=n()) %>% 
+    select(StaffName, total) %>% unique() %>% arrange(desc(total), StaffName)
+  
+  kable(TstaffName, format="latex")
+
+```
+
+### Transaction Patron Status
+
+```{r TuserType}
+  TuserTypes <- group_by(Trans, UserStatus) %>% mutate(total=n()) %>% 
+    select(UserStatus, total) %>% unique() %>% arrange(desc(total))
+  
+  ggplot(data=TuserTypes, mapping=aes(x=UserStatus, y=total, label=total)) +
+    theme_light() + 
+    theme(legend.position="none") +
+    geom_col(fill="#999999") + 
+    geom_text() +
+    labs(x="User Status", y="Number of Transactions")
+```
+
+### Transaction Course Departments
+
+_Departments listed if they had 2 or more transactions_
+
+```{r Tinstruction}
+  Tinstruction <- group_by(Trans, Department) %>% mutate(total=n()) %>% 
+    select(Department, total) %>% unique() %>% 
+    filter(total > 1  & Department != "NA") %>% arrange(desc(total), Department)
+
+  kable(Tinstruction, format="latex")
+  
+```
+
+### Transaction Type
+
+_Transactions can be coded as multiple types, meaning the sum of the totals
+in each category may exceed the total number of transactions_
+
+```{r Ttype}
+  Ttype_type <- bind_rows(tibble(Ttype="Directional"), tibble(Ttype="Informational"),
+                              tibble(Ttype="Referral"), tibble(Ttype="Reference"))
+  Ttype_total <- bind_rows(count(filter(Trans,Directional==TRUE)), 
+                               count(filter(Trans, Informational==TRUE)),
+                               count(filter(Trans, Referral==TRUE)),
+                               count(filter(Trans, Reference==TRUE)))
+  Ttype <- bind_cols(Ttype_type, Ttype_total)
+  
+  ggplot(data=Ttype, mapping=aes(x=Ttype, y=n, label=n)) +
+    theme_light() + 
+    theme(legend.position="none") +
+    geom_col(fill="#999999") + 
+    geom_text() +
+    labs(x="Type", y="Number of Transactions")
+```
+
+### Transaction Format
+
+```{r Tform}
+  Tform <- group_by(Trans, Format) %>% mutate(total=n()) %>% 
+    select(Format, total) %>% unique() %>% 
+    filter(Format=="in person/face to face" | Format=="on the phone" | Format=="over e-mail") %>% 
+    arrange(desc(total))
+
+  ggplot(data=Tform, mapping=aes(x=Format, y=total, label=total)) +
+    theme_light() + 
+    theme(legend.position="none") +
+    geom_col(fill="#999999") + 
+    geom_text() +
+    labs(x="Format", y="Number of Transactions")
+```
+
+### Transactions by Week of the Year
+
+```{r TweekNum}
+  TweekNum <- group_by(Trans, Week) %>% mutate(total=n()) %>% 
+    select(Week, total) %>% unique() %>% arrange(Week)
+
+  ggplot(data=TweekNum, mapping=aes(x=Week, y=total, label=total)) +
+    theme_light() + 
+    theme(legend.position="none") +
+    geom_col(fill="#999999") + 
+    geom_text() +
+    labs(x="Week of the Year", y="Number of Transactions")
+```
+
+
+## Consultations
+
+__Total `r depart` consultations = `r count(Cons)`__
+
+__Total number of patrons in consultations = `r tally(Cons, Count)` (average = `r as.integer(tally(Cons, Count)/count(Cons))`)__
+
+### Staff Consultations
+
+```{r Cparams}
+  CstaffName <- group_by(Cons, StaffName) %>% mutate(total=n()) %>% 
+    select(StaffName, total) %>% unique() %>% arrange(desc(total), StaffName)
+  
+  kable(CstaffName, format="latex")
+```
+
+### Consultation Patron Status
+
+```{r CuserType}
+  CuserTypes <- group_by(Cons, UserStatus) %>% mutate(total=n()) %>% 
+    select(UserStatus, total) %>% unique() %>% arrange(desc(total))
+  
+  ggplot(data=CuserTypes, mapping=aes(x=UserStatus, y=total, label=total)) +
+    theme_light() + 
+    theme(legend.position="none") +
+    geom_col(fill="#999999") + 
+    geom_text() +
+    labs(x="User Status", y="Number of Consultations")
+```
+
+### Consultation Course Departments
+
+_Departments listed if they had 2 or more consultations_
+
+```{r Cinstruction}
+  Cinstruction <- filter(Cons, !is.na(Course)) %>% group_by(Department) %>% mutate(total=n()) %>% 
+    select(Department, total) %>% unique() %>% 
+    filter(total > 1 & Department != "NA") %>% arrange(desc(total), Department)
+
+  kable(Cinstruction, format="latex")
+```
+
+### Patron Departments for non-Course Consultations
+
+_Departments listed if they had 2 or more consultations_
+
+```{r CuserDept}
+  CuserDept <- filter(Cons, is.na(Course)) %>% group_by(UserDept) %>% mutate(total=n()) %>% 
+    select(UserDept, total) %>% unique() %>% 
+    filter(total > 1 & UserDept != "NA") %>% arrange(desc(total), UserDept)
+
+  kable(CuserDept, format="latex")
+```
+
+### Consultation Format
+
+```{r Cform}
+  Cform <- group_by(Cons, Format) %>% mutate(total=n()) %>% 
+    select(Format, total) %>% unique() %>% arrange(desc(total))
+
+  ggplot(data=Cform, mapping=aes(x=Format, y=total, label=total)) +
+    theme_light() + 
+    theme(legend.position="none") +
+    geom_col(fill="#999999") + 
+    geom_text() +
+    labs(x="Format", y="Number of Consultations")
+```
+
+### Consultations by Week of the Year
+
+```{r CweekNum}
+  CweekNum <- group_by(Cons, Week) %>% mutate(total=n()) %>% 
+    select(Week, total) %>% unique() %>% arrange(Week)
+
+  ggplot(data=CweekNum, mapping=aes(x=Week, y=total, label=total)) +
+    theme_light() + 
+    theme(legend.position="none") +
+    geom_col(fill="#999999") + 
+    geom_text() +
+    labs(x="Week of the Year", y="Number of Consultations")
+```
+
+
+
+## Presentations
+
+__Total `r depart` presentations = `r count(Pres)`__
+
+__Total number of patrons in presentations = `r as.integer(tally(Pres, Count))` (average = `r as.integer(tally(Pres, Count)/count(Pres))`)__
+
+__Total presentation time = `r as.integer(tally(Pres, Length))` minutes (average = `r as.integer(tally(Pres, Length)/count(Pres))` minutes)__
+
+### Staff Presentations
+
+```{r Pparams}
+  PstaffName <- group_by(Pres, StaffName) %>% mutate(total=n()) %>% 
+    select(StaffName, total) %>% unique() %>% arrange(desc(total), StaffName)
+  
+  kable(PstaffName, format="latex")
+```
+
+### Presentation Patron Status
+
+```{r PuserType}
+  PuserType_type <- bind_rows(tibble(UserType="Undergraduates"), tibble(UserType="Graduates"),
+                              tibble(UserType="FacultyStaff"), tibble(UserType="Children"),
+                              tibble(UserType="HighSchool"), tibble(UserType="NonUWM"))
+  PuserType_total <- bind_rows(count(filter(Pres,Undergraduates==TRUE)), 
+                               count(filter(Pres, Graduates==TRUE)),
+                               count(filter(Pres, FacultyStaff==TRUE)),
+                               count(filter(Pres, Children==TRUE)),
+                               count(filter(Pres, HighSchool)),
+                               count(filter(Pres, NonUWM==TRUE)))
+  PuserType <- bind_cols(PuserType_type, PuserType_total)
+  
+  ggplot(PuserType, mapping=aes(x=UserType, y=n, label=n)) +
+    theme_light() + 
+    theme(legend.position="none") +
+    geom_col(fill="#999999") + 
+    geom_text() +
+    labs(x="User Type", y="Number of Presentations")
+```
+
+### Presentation Course Departments
+
+_Departments listed if they had 2 or more presentations_
+
+```{r Pinstruction}
+  Pinstruction <- group_by(Pres, Department) %>% mutate(total=n()) %>% 
+    select(Department, total) %>% unique() %>% 
+    filter(total > 1 & Department != "NA") %>% arrange(desc(total), Department)
+
+  kable(Pinstruction, format="latex")
+```
+
+<!-- ### Presentation User Count
+
+```{r Pcount}
+  Pcount <- group_by(Pres, Count) %>% mutate(total=n()) %>% 
+    select(Count, total) %>% unique() %>% arrange(Count)
+
+  ggplot(data=Pcount) +
+    geom_point(mapping=aes(x=Count, y=total)) +
+    geom_smooth(mapping=aes(x=Count, y=total), se=FALSE) +
+    labs(x="Number of Attendees", y="Number of Presentations")
+``` 
+-->
+
+### Presentation Type
+
+```{r Ptype}
+  Ptype <- group_by(Pres, PresType) %>% mutate(total=n()) %>% 
+    select(PresType, total) %>% unique() %>% arrange(desc(total))
+
+  ggplot(data=Ptype, mapping=aes(x=PresType, y=total, label=total)) +
+    theme_light() + 
+    theme(legend.position="none") +
+    geom_col(fill="#999999") + 
+    geom_text() +
+    labs(x="Presentation Type", y="Number of Presentations")
+```
+
+### Presentation Format
+
+```{r Pform}
+  Pform <- group_by(Pres, Format) %>% mutate(total=n()) %>% 
+    select(Format, total) %>% unique() %>% arrange(desc(total))
+
+  ggplot(data=Pform, mapping=aes(x=Format, y=total, label=total)) +
+    theme_light() + 
+    theme(legend.position="none") +
+    geom_col(fill="#999999") + 
+    geom_text() +
+    labs(x="Format", y="Number of Presentations")
+```
+
+### Presentations by Week of the Year
+
+```{r PweekNum}
+  PweekNum <- group_by(Pres, Week) %>% mutate(total=n()) %>% 
+    select(Week, total) %>% unique() %>% arrange(Week)
+
+  ggplot(data=PweekNum, mapping=aes(x=Week, y=total, label=total)) +
+    theme_light() + 
+    theme(legend.position="none") +
+    geom_col(fill="#999999") + 
+    geom_text() +
+    labs(x="Week of the Year", y="Number of Presentations")
+```
+

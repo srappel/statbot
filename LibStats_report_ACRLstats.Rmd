@@ -1,0 +1,100 @@
+---
+title: "Golda Meir Library ACRL Statistics Report"
+params:
+  fpath: C:/Users/briney/Documents/JobDocs/LibStats/Reports/data
+  periodStart: 2017-07-01 00:00:00
+  periodEnd: 2018-06-30 23:59:59
+output:
+  pdf_document:
+    fig_width: 7
+    fig_height: 3
+---
+
+<!--
+## Name: LibStats_report_dept.Rmd
+## Created: June 2018 by Kristin Briney
+## Purpose: This Rmarkdown template will create a report for the whole library 
+##          using cleaned StatBot data. Date ranges must be specified.
+-->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+library(tidyverse)
+library(stringr)
+library(lubridate)
+library(knitr)
+
+  depart <- params$dept
+  pStart <-  ymd_hms(params$periodStart)
+  pEnd <-  ymd_hms(params$periodEnd)
+
+  ## Load consultation data
+  
+  finput <- paste(params$fpath, "Cons.csv", sep="/")
+  Cons_all <- read_csv(finput)
+  
+  Cons <- filter(Cons_all, Cons_all$ConsDate>=pStart & Cons_all$ConsDate<=pEnd)
+  Cons <- add_column(Cons, Week=week(Cons$ConsDate))
+  
+  ## Load presentation data
+  
+  finput <- paste(params$fpath, "Pres.csv", sep="/")
+  Pres_all <- read_csv(finput)
+  
+  Pres <- filter(Pres_all, Pres_all$PresDateTime>=pStart & Pres_all$PresDateTime<=pEnd)
+  Pres <- add_column(Pres, Week=week(Pres$PresDateTime))
+  
+  ## Load transaction data
+  
+  finput <- paste(params$fpath, "Trans.csv", sep="/")
+  Trans_all <- read_csv(finput)
+  
+  Trans <- filter(Trans_all, Trans_all$TransDateTime>=pStart & 
+                    Trans_all$TransDateTime<=pEnd)
+  Trans <- add_column(Trans, Week=week(Trans$TransDateTime))
+  
+    
+  ## Load and process Welcome Desk data
+  
+  finput <- paste(params$fpath, "WD.csv", sep="/")
+  WD_all <- read_csv(finput)
+  
+  WD <- filter(WD_all, WD_all$WDDateTime>=pStart & 
+                    WD_all$WDDateTime<=pEnd)
+  WD <- add_column(WD, Department="NA", Course=0, Faculty="NA", 
+                   Location="Welcome Desk", after="Reference")
+  WD <- add_column(WD, Week=week(WD$WDDateTime))
+  WD <- rename(WD, TransDateTime=WDDateTime)
+  
+  # Add Welcome Desk data to Transactional data
+  
+  Trans <- bind_rows(Trans, WD)
+```
+
+### Golda Meir Library
+
+### Time period: `r pStart` to `r pEnd`
+
+
+### Transactions
+
+__Total reference transactions = `r count(filter(Trans, Reference==TRUE))`__
+
+
+## Consultations
+
+__Total consultations = `r count(Cons)`__
+
+
+## Presentations
+
+__Total presentations = `r count(Pres)`__
+
+```{r Ponline}
+  Ponline <- group_by(Pres, Format) %>% mutate(total=n()) %>% 
+    select(Format, total) %>% filter(Format=="online") %>% unique()
+```
+
+__Total online presentations = `r Ponline[2]`__
+
+__Total presentation attendance = `r as.integer(tally(Pres, Count))`__
